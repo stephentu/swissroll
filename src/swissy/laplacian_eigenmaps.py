@@ -26,7 +26,10 @@ def reduce(X, d, k):
     nbrs = NearestNeighbors(n_neighbors=k, algorithm='ball_tree').fit(X)
 
     # adjacency matrix of the graph
+    # note that nearest neighbors doesn't automatically yield a symmetric
+    # matrix, so we symmetrize it
     W = nbrs.kneighbors_graph(X)
+    W = (W + W.T) * 0.5
 
     # form diagonal
     ds = np.array([[W[i, :].sum() for i in xrange(n)]])
