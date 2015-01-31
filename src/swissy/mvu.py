@@ -8,6 +8,7 @@ from scipy.sparse.linalg import eigsh
 import numpy as np
 import picos as pic
 import cvxopt as cvx
+import sys
 
 import mosek
 import time
@@ -43,8 +44,11 @@ def reduce(X, d, k):
         barcj.append(i)
         barcval.append(1.)
 
-    task.appendcons(1 + n * k)
     task.appendbarvars([n])
+    task.appendcons(1 + n * k)
+
+    symc = task.appendsparsesymmat(n, barci, barcj, barcval)
+    task.putbarcj(0, [symc], [1.0])
 
     for idx, dists in enumerate(distances):
         for jid, dist in enumerate(dists[1:]):
@@ -69,6 +73,7 @@ def reduce(X, d, k):
     task.putbaraij(n * k, 0, [syma], [1.0])
 
     task.putobjsense(mosek.objsense.maximize)
+    task.writedata("taskdump.task")
 
     print "calling optimize()"
     start = time.time()
@@ -80,7 +85,7 @@ def reduce(X, d, k):
     solsta = task.getsolsta(mosek.soltype.itr)
 
     if solsta not in (mosek.solsta.optimal, mosek.solsta.near_optimal):
-        raise ValueError("did not converge")
+        print "WARNING: did not converge"
 
     barvardim = n
     lenbarvar = barvardim * (barvardim + 1) / 2
@@ -90,9 +95,12 @@ def reduce(X, d, k):
     iu = np.triu_indices(n=barvardim)
     K = np.zeros((barvardim, barvardim))
     K[iu] = barx
+    K.T[iu] = barx
 
     w, v = eigsh(K, k=d, which='LA')
     w = np.sqrt(w)
+
+    print "pval=", task.getprimalobj(mosek.soltype.itr), "dval=", task.getdualobj(mosek.soltype.itr)
 
     return w * v
 
@@ -115,7 +123,7 @@ def _reduce_picos(X, d, k):
     p = pic.Problem()
     K = p.add_variable('K', (n, n), vtype='symmetric')
 
-    ones = cvx.matrix(-1. * np.ones((n, n)))
+    ones = cvx.matrix(np.ones((n, n)))
     ones = pic.new_param('ones', ones)
     p.add_constraint( (ones | K) == 0. )
 
